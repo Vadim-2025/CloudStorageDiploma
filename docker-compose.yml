@@ -1,0 +1,40 @@
+version: "3.9"
+services:
+
+  database:
+    image: postgres:latest
+    build: .
+    container_name: postgresDB
+    restart: always
+    environment:
+      - POSTGRES_DB=postgres
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+    ports:
+      - '5432:5432'
+
+  server:
+    container_name: cloudStorageBackDiploma
+    build: ./
+    image: cloud-storage-back-diploma-app:latest
+    ports:
+      - '8181:8181'
+    environment:
+      - SPRING_DATASOURCE_URL=jdbc:postgresql://database:5432/postgres
+      - SPRING_DATASOURCE_USERNAME=postgres
+      - SPRING_DATASOURCE_PASSWORD=password
+      - SPRING_JPA_HIBERNATE_DDL_AUTO=update
+      - SPRING_LIQUIBASE_URL=jdbc:postgresql://database:5432/postgres
+      - SPRING_LIQUIBASE_USER=postgres
+      - SPRING_LIQUIBASE_PASSWORD=password
+    depends_on:
+      - database
+
+  client:
+    container_name: frontend-client-vue
+    build:
+      context: netology-diplom-frontend
+      dockerfile: Dockerfile
+    image: netology-diplom-frontend:latest
+    ports:
+      - "8081:8081"
