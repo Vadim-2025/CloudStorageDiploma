@@ -1,12 +1,11 @@
 package ru.netology.cloudstoragediploma.service;
 
+import jakarta.transaction.Transactional;
 import lombok.NonNull;
 import lombok.RequiredArgsConstructor;
-import lombok.SneakyThrows;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.stereotype.Service;
-import org.springframework.transaction.annotation.Transactional;
 import org.springframework.web.multipart.MultipartFile;
 import ru.netology.cloudstoragediploma.dto.FileDTO;
 import ru.netology.cloudstoragediploma.entity.File;
@@ -16,14 +15,14 @@ import ru.netology.cloudstoragediploma.exception.InvalidInputDataException;
 import ru.netology.cloudstoragediploma.exception.UserNotFoundException;
 import ru.netology.cloudstoragediploma.repository.FileRepository;
 import ru.netology.cloudstoragediploma.repository.UserRepository;
-import ru.netology.cloudstoragediploma.security.JwtProvider;
-
 
 import java.io.IOException;
 import java.io.InputStream;
 import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
 import java.time.LocalDateTime;
 import java.util.List;
+import java.util.Optional;
 import java.util.stream.Collectors;
 
 @Service
@@ -36,13 +35,14 @@ public class FileService {
 
     public void uploadFile(@NonNull MultipartFile file, String fileName) {
         if (file.isEmpty()) {
-            throw new FileNotFoundException("File not found", 0);
+            throw new FileNotFoundException("Файл пуст", 0);
         }
-        System.out.println("It' works");
+        log.info("Загрузка файла с именем {}", fileName);
+
         Long userId = getAuthorizedUser().getId();
 
         if (fileRepository.findFileByUserIdAndFileName(userId, fileName).isPresent()) {
-            throw new InvalidInputDataException("This file name already exists. Please choose another file name", userId);
+            throw new InvalidInputDataException("Имя файла уже занято. Укажите другое имя", userId);
         }
 
         String hash = getHashOfFile(file);
@@ -50,7 +50,7 @@ public class FileService {
         try {
             fileBytes = file.getBytes();
         } catch (IOException e) {
-            throw new InvalidInputDataException("Can't read the file bytes", userId);
+            throw new InvalidInputDataException("Ошибка чтения файла", userId);
         }
 
         fileRepository.save(File.builder()
@@ -66,7 +66,6 @@ public class FileService {
 
     public FileDTO downloadFile(String fileName) {
         Long userId = getAuthorizedUser().getId();
-
         File file = getFileFromStorage(fileName, userId);
 
         return FileDTO.builder()
@@ -76,30 +75,26 @@ public class FileService {
                 .build();
     }
 
-    public void editFileName(String fileName, FileDTO fileDTO) {
+    public void editFileName(String oldFilename, FileDTO fileDTO) {
         Long userId = getAuthorizedUser().getId();
-
-        File file = getFileFromStorage(fileName, userId);
+        File file = getFileFromStorage(oldFilename, userId);
         file.setFileName(fileDTO.getFileName());
-
         fileRepository.save(file);
     }
 
     public void deleteFile(String fileName) {
         Long userId = getAuthorizedUser().getId();
-
         File file = getFileFromStorage(fileName, userId);
         file.setDelete(true);
         file.setUpdatedDate(LocalDateTime.now());
-
         fileRepository.save(file);
     }
 
     public List<FileDTO> getAllFiles(int limit) {
         Long userId = getAuthorizedUser().getId();
-
-        List<File> filesByUserIdWithLimit = fileRepository.findFilesByUserIdWithLimit(userId, limit);
-        return filesByUserIdWithLimit.stream().filter(file -> !file.isDelete())
+        List<File> files = fileRepository.findFilesByUserIdWithLimit(userId, limit);
+        return files.stream()
+                .filter(file -> !file.isDelete())
                 .map(file -> FileDTO.builder()
                         .fileName(file.getFileName())
                         .type(file.getType())
@@ -109,35 +104,37 @@ public class FileService {
                 .collect(Collectors.toList());
     }
 
-    @SneakyThrows
     private String getHashOfFile(MultipartFile file) {
-
-        MessageDigest md = MessageDigest.getInstance("MD5");
-
-        try (InputStream fis = file.getInputStream()) {
-            byte[] buffer = new byte[1024];
-            int read;
-            while ((read = fis.read(buffer)) != -1) {
-                md.update(buffer, 0, read);
+        try {
+            MessageDigest md = MessageDigest.getInstance("MD5");
+            try (InputStream fis = file.getInputStream()) {
+                byte[] buffer = new byte[1024];
+                int read;
+                while ((read = fis.read(buffer)) != -1) {
+                    md.update(buffer, 0, read);
+                }
             }
+            StringBuilder result = new StringBuilder();
+            for (byte b : md.digest()) {
+                result.append(String.format("%02x", b));
+            }
+            return result.toString();
+        } catch (NoSuchAlgorithmException | IOException ex) {
+            throw new InvalidInputDataException("Ошибка при обработке файла", 0);
         }
-        StringBuilder result = new StringBuilder();
-        for (byte b : md.digest()) {
-            result.append(String.format("%02x", b));
-        }
-        return result.toString();
+    }
+
+    private User getAuthorizedUser() {
+        String login = SecurityContextHolder.getContext().getAuthentication().getName();
+        return userRepository.findUserByLogin(login)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден", 0));
     }
 
     private File getFileFromStorage(String fileName, Long userId) {
-        if (fileRepository.findFileByUserIdAndFileName(userId, fileName).isEmpty()) {
-            throw new FileNotFoundException("File in storage with file name: " + fileName + " not found! User ID is:" , userId);
+        Optional<File> fileOpt = fileRepository.findFileByUserIdAndFileName(userId, fileName);
+        if (!fileOpt.isPresent()) {
+            throw new FileNotFoundException("Файл с указанным именем не найден", userId);
         }
-        return fileRepository.findFileByUserIdAndFileName(userId, fileName).get();
-    }
-
-    public User getAuthorizedUser() {
-        final String login = SecurityContextHolder.getContext().getAuthentication().getName();
-        return userRepository.findUserByLogin(login).orElseThrow(() ->
-                new UserNotFoundException("User not found by login", 0));
+        return fileOpt.get();
     }
 }

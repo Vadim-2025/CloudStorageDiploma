@@ -1,7 +1,6 @@
 package ru.netology.cloudstoragediploma.controller;
 
 import ru.netology.cloudstoragediploma.dto.FileDTO;
-import ru.netology.cloudstoragediploma.service.FileService;
 import org.junit.jupiter.api.BeforeEach;
 import org.junit.jupiter.api.Test;
 import org.mockito.Mockito;
@@ -14,6 +13,7 @@ import org.springframework.test.web.servlet.request.MockMvcRequestBuilders;
 import org.springframework.test.web.servlet.result.MockMvcResultMatchers;
 import org.springframework.test.web.servlet.setup.MockMvcBuilders;
 import org.testcontainers.shaded.com.fasterxml.jackson.databind.ObjectMapper;
+import ru.netology.cloudstoragediploma.service.FileService;
 
 import java.util.List;
 
@@ -39,18 +39,19 @@ public class FileControllerTest {
     @BeforeEach
     void setUp() {
         fileService = mock(FileService.class);
-        mockMvc = MockMvcBuilders.standaloneSetup(new FileController(fileService)).build();
+        mockMvc = MockMvcBuilders.standaloneSetup(new FileController(fileService))
+                .build();
         objectMapper = new ObjectMapper();
     }
 
     @Test
     void test_uploadFile() throws Exception {
-        MockMultipartFile multipartFile = new MockMultipartFile(
-                "file",
+        MockMultipartFile multipartFile = new MockMultipartFile("file",
                 MY_FILE_NAME,
                 MediaType.TEXT_PLAIN_VALUE,
                 "MyTestFile".getBytes());
 
+        // Отправляем multipart-запрос
         mockMvc.perform(MockMvcRequestBuilders.multipart(URL_FILE)
                         .file(multipartFile)
                         .param(FILE_NAME, "file")
@@ -63,10 +64,13 @@ public class FileControllerTest {
         FileDTO fileDTO = FileDTO.builder()
                 .fileName(MY_FILE_NAME)
                 .fileByte("MyTestFile".getBytes())
-                .type(MediaType.TEXT_PLAIN_VALUE).build();
+                .type(MediaType.TEXT_PLAIN_VALUE)
+                .build();
 
+        // Эмулируем поведение сервиса
         Mockito.when(fileService.downloadFile(MY_FILE_NAME)).thenReturn(fileDTO);
 
+        // Отправляем GET-запрос
         mockMvc.perform(get(URL_FILE)
                         .param(FILE_NAME, MY_FILE_NAME)
                         .header(AUTH_TOKEN, VALUE_TOKEN))
@@ -79,6 +83,7 @@ public class FileControllerTest {
         FileDTO newName = new FileDTO();
         newName.setFileName("NewTestFile.txt");
 
+        // Отправляем PUT-запрос
         mockMvc.perform(put(URL_FILE)
                         .param(FILE_NAME, MY_FILE_NAME)
                         .header(AUTH_TOKEN, VALUE_TOKEN)
@@ -89,6 +94,7 @@ public class FileControllerTest {
 
     @Test
     void test_deleteFile() throws Exception {
+        // Отправляем DELETE-запрос
         mockMvc.perform(delete(URL_FILE)
                         .param(FILE_NAME, MY_FILE_NAME)
                         .header(AUTH_TOKEN, VALUE_TOKEN))
@@ -100,9 +106,13 @@ public class FileControllerTest {
         List<FileDTO> listFile = List.of(
                 FileDTO.builder().size(1425L).fileName("MyTestFile1.txt").build(),
                 FileDTO.builder().size(1926L).fileName("MyTestFile2.txt").build(),
-                FileDTO.builder().size(3258L).fileName("MyTestFile3.txt").build());
+                FileDTO.builder().size(3258L).fileName("MyTestFile3.txt").build()
+        );
+
+        // Эмулируем сервис
         Mockito.when(fileService.getAllFiles(3)).thenReturn(listFile);
 
+        // Отправляем GET-запрос
         mockMvc.perform(get("/list")
                         .header(AUTH_TOKEN, VALUE_TOKEN)
                         .param("limit", "3"))

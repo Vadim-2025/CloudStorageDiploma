@@ -2,16 +2,13 @@ package ru.netology.cloudstoragediploma.service;
 
 import lombok.RequiredArgsConstructor;
 import lombok.extern.slf4j.Slf4j;
-
 import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.stereotype.Service;
-import ru.netology.cloudstoragediploma.dto.UserDTO;
 import ru.netology.cloudstoragediploma.entity.User;
 import ru.netology.cloudstoragediploma.enums.Role;
 import ru.netology.cloudstoragediploma.exception.UserAlreadyExistsException;
 import ru.netology.cloudstoragediploma.exception.UserNotFoundException;
 import ru.netology.cloudstoragediploma.repository.UserRepository;
-import ru.netology.cloudstoragediploma.utils.MapUtils;
 
 import java.util.Collections;
 
@@ -20,30 +17,55 @@ import java.util.Collections;
 @RequiredArgsConstructor
 public class RegService {
     private final UserRepository userRepository;
-    private final MapUtils mapUtils;
     private final PasswordEncoder passwordEncoder;
 
-    //Проверка наличия пользователя в базе данных. Если есть, пробрасываем исключение, если нет, регистрируем:
-    public UserDTO regUser(UserDTO userDTO) {
-        User user = mapUtils.toUserEntity(userDTO);
+    /**
+     * Регистрация нового пользователя.
+     *
+     * @param user Объект пользователя
+     * @return Зарегистрированный пользователь
+     */
+    public User regUser(User user) {
+        log.info("Регистрация нового пользователя {}", user.getLogin());
+
+        // Проверяем, не существует ли пользователь с таким логином
         userRepository.findUserByLogin(user.getLogin()).ifPresent(s -> {
+            log.warn("Пользователь с данным логином уже существует");
             throw new UserAlreadyExistsException("User already exists", user.getId());
         });
+
+        // Шифруем пароль
         user.setPassword(passwordEncoder.encode(user.getPassword()));
+
+        // Устанавливаем начальные роли (обычно ROLE_USER)
         user.setRoles(Collections.singleton(Role.ROLE_USER));
         user.setRole(Role.ROLE_USER.getAuthority());
-        return mapUtils.toUserDto(userRepository.save(user));
+
+        // Сохраняем пользователя в базу данных
+        return userRepository.save(user);
     }
 
-    //Поиск пользователя по ID, если нет, пробрасываем исключение:
-    public UserDTO getUser(Long id) {
-        User foundUser = userRepository.findById(id).orElseThrow(() -> new UserNotFoundException("User not found", id));
-        return mapUtils.toUserDto(foundUser);
+    /**
+     * Получение информации о пользователе по идентификатору.
+     *
+     * @param id Идентификатор пользователя
+     * @return Пользователь
+     */
+    public User getUser(Long id) {
+        log.info("Получение информации о пользователе с id={}", id);
+        return userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден", id));
     }
 
-    //Удаление пользователя по ID. Если нет, пробрасываем исключение:
+    /**
+     * Удаление пользователя по идентификатору.
+     *
+     * @param id Идентификатор пользователя
+     */
     public void deleteUser(Long id) {
-        User foundUser = userRepository.findById(id).orElseThrow(() -> new UserNotFoundException("User not found", id));
-        userRepository.deleteById(id);
+        log.info("Удаление пользователя с id={}", id);
+        User foundUser = userRepository.findById(id)
+                .orElseThrow(() -> new UserNotFoundException("Пользователь не найден", id));
+        userRepository.delete(foundUser);
     }
 }

@@ -1,5 +1,7 @@
 package ru.netology.cloudstoragediploma.service;
+
 import ru.netology.cloudstoragediploma.dto.UserDTO;
+import ru.netology.cloudstoragediploma.enums.Role;
 import ru.netology.cloudstoragediploma.model.Token;
 import ru.netology.cloudstoragediploma.repository.UserRepository;
 import ru.netology.cloudstoragediploma.entity.User;
@@ -12,10 +14,7 @@ import org.junit.jupiter.api.extension.ExtendWith;
 import org.mockito.Mockito;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.security.core.Authentication;
-import org.springframework.security.core.context.SecurityContextHolder;
 import org.springframework.security.crypto.password.PasswordEncoder;
-import org.springframework.security.test.context.support.WithMockUser;
 import org.springframework.test.context.ContextConfiguration;
 import org.springframework.test.context.bean.override.mockito.MockitoBean;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
@@ -32,14 +31,19 @@ import java.util.Optional;
 public class AuthServiceTest {
     private static final String AUTH_TOKEN = "auth-token";
     private static final String VALUE_TOKEN = "Bearer token";
+
     @Autowired
     private AuthService authService;
+
     @MockitoBean
     private UserRepository userRepository;
+
     @MockitoBean
     private JwtProvider jwtProvider;
+
     @MockitoBean
     private PasswordEncoder passwordEncoder;
+
     private HttpServletRequest request;
     private HttpServletResponse response;
     private User user;
@@ -54,30 +58,37 @@ public class AuthServiceTest {
                 .login("testLogin@test.ru")
                 .password("testPassword")
                 .build();
+
         user = User.builder()
                 .id(1L)
                 .login("testLogin@test.ru")
-                .password("testPassword")
+                .password("encodedPassword")
+                .roles(Collections.singleton(Role.ROLE_USER))
                 .build();
     }
 
     @Test
     public void test_authenticationLogin() {
-        Mockito.when(userRepository.findUserByLogin(userDTO.getLogin())).thenReturn(Optional.ofNullable(user));
+        // Моки: найдём пользователя в репозитории
+        Mockito.when(userRepository.findUserByLogin(userDTO.getLogin())).thenReturn(Optional.of(user));
         Mockito.when(passwordEncoder.matches(userDTO.getPassword(), user.getPassword())).thenReturn(true);
         Mockito.when(jwtProvider.generateAccessToken(user)).thenReturn(VALUE_TOKEN);
 
-        Token generatedToken = authService.login(userDTO);
-        Assertions.assertNotNull(generatedToken);
+        // Выполняем авторизацию
+        Token token = authService.login(user);
+        Assertions.assertNotNull(token);
+        Assertions.assertEquals(VALUE_TOKEN, token.getToken());
     }
 
     @Test
-    @WithMockUser(username = "testLogin@test.ru",password = "testPassword")
     public void test_logout() {
+        // Эмулируем запрос
+        Mockito.when(request.getHeader(AUTH_TOKEN)).thenReturn(AUTH_TOKEN);
 
-        Authentication auth = SecurityContextHolder.getContext().getAuthentication();
-        Mockito.when(userRepository.findUserByLogin(auth.getName())).thenReturn(Optional.ofNullable(user));
-        String login = authService.logout(AUTH_TOKEN, request, response);
-        Assertions.assertEquals(login, userDTO.getLogin());
+        // Выполняем лог-аут
+        authService.logout(AUTH_TOKEN, request, response);
+
+        // Проверяем, что токен попал в чёрный список
+        Mockito.verify(jwtProvider, Mockito.times(1)).addAuthTokenInBlackList(AUTH_TOKEN);
     }
 }

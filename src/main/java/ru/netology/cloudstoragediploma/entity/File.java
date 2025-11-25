@@ -1,9 +1,9 @@
 package ru.netology.cloudstoragediploma.entity;
 
 import lombok.*;
-import ru.netology.cloudstoragediploma.entity.User;
 
 import jakarta.persistence.*;
+
 import java.time.LocalDateTime;
 
 @Entity

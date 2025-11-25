@@ -1,9 +1,13 @@
 package ru.netology.cloudstoragediploma.service;
 
+import org.junit.jupiter.api.Assertions;
+import org.springframework.security.crypto.password.PasswordEncoder;
 import org.springframework.test.context.junit.jupiter.SpringExtension;
 import ru.netology.cloudstoragediploma.dto.UserDTO;
 import ru.netology.cloudstoragediploma.entity.User;
 import ru.netology.cloudstoragediploma.enums.Role;
+import ru.netology.cloudstoragediploma.exception.UserAlreadyExistsException;
+import ru.netology.cloudstoragediploma.exception.UserNotFoundException;
 import ru.netology.cloudstoragediploma.repository.UserRepository;
 import ru.netology.cloudstoragediploma.utils.MapUtils;
 
@@ -21,12 +25,18 @@ import java.util.Optional;
 @ExtendWith(SpringExtension.class)
 @SpringBootTest
 public class RegServiceTest {
+
     @Autowired
     private RegService regService;
+
     @MockitoBean
     private UserRepository userRepository;
+
     @MockitoBean
     private MapUtils mapUtils;
+
+    @MockitoBean
+    private PasswordEncoder passwordEncoder;
 
     private User user;
     private UserDTO userDTO;
@@ -37,42 +47,81 @@ public class RegServiceTest {
                 .login("testLogin@test.ru")
                 .password("testPassword")
                 .build();
+
         user = User.builder()
                 .id(1L)
                 .login("testLogin@test.ru")
-                .password("testPassword")
+                .password("encodedPassword")
                 .roles(Collections.singleton(Role.ROLE_USER))
                 .build();
     }
 
     @Test
-    public void test_regUser() {
+    public void testRegisterUser() {
+        // Готовим моки
+        Mockito.when(userRepository.findUserByLogin(userDTO.getLogin())).thenReturn(Optional.empty());
         Mockito.when(mapUtils.toUserEntity(userDTO)).thenReturn(user);
-        Mockito.when(userRepository.findUserByLogin(user.getLogin())).thenReturn(Optional.empty());
+        Mockito.when(passwordEncoder.encode(userDTO.getPassword())).thenReturn("encodedPassword");
 
-        regService.regUser(userDTO);
+        // Действие
+        User registeredUser = regService.regUser(user);
 
-        Mockito.verify(userRepository, Mockito.times(1)).findUserByLogin("testLogin@test.ru");
+        // Проверка результата
+        Assertions.assertNotNull(registeredUser);
+        Assertions.assertEquals(userDTO.getLogin(), registeredUser.getLogin());
+        Assertions.assertEquals("encodedPassword", registeredUser.getPassword());
         Mockito.verify(userRepository, Mockito.times(1)).save(user);
     }
 
     @Test
-    public void test_getUser() {
+    public void testRegisterUser_ExistingUser_ExceptionThrown() {
+        // Готовим моки
+        Mockito.when(userRepository.findUserByLogin(userDTO.getLogin())).thenReturn(Optional.of(user));
 
-        Mockito.when(userRepository.findById(1L)).thenReturn(Optional.ofNullable(user));
-
-        regService.getUser(1L);
-
-        Mockito.verify(userRepository, Mockito.times(1)).findById(1L);
+        // Проверяем, что исключение выброшено
+        Assertions.assertThrows(UserAlreadyExistsException.class, () -> regService.regUser(user));
     }
 
     @Test
-    public void test_deleteUser() {
-        Mockito.when(userRepository.findById(1L)).thenReturn(Optional.ofNullable(user));
+    public void testGetUser_UserFound_Success() {
+        // Подготовили моки
+        Mockito.when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
 
-        regService.deleteUser(1L);
+        // Действие
+        User retrievedUser = regService.getUser(user.getId());
 
-        Mockito.verify(userRepository, Mockito.times(1)).findById(1L);
-        Mockito.verify(userRepository, Mockito.times(1)).deleteById(1L);
+        // Проверка результата
+        Assertions.assertNotNull(retrievedUser);
+        Assertions.assertEquals(user.getLogin(), retrievedUser.getLogin());
+    }
+
+    @Test
+    public void testGetUser_UserNotFound_ExceptionThrown() {
+        // Подготовили моки
+        Mockito.when(userRepository.findById(user.getId())).thenReturn(Optional.empty());
+
+        // Проверяем, что исключение выброшено
+        Assertions.assertThrows(UserNotFoundException.class, () -> regService.getUser(user.getId()));
+    }
+
+    @Test
+    public void testDeleteUser_UserFound_Success() {
+        // Подготовили моки
+        Mockito.when(userRepository.findById(user.getId())).thenReturn(Optional.of(user));
+
+        // Действие
+        regService.deleteUser(user.getId());
+
+        // Проверка, что произошло удаление
+        Mockito.verify(userRepository, Mockito.times(1)).deleteById(user.getId());
+    }
+
+    @Test
+    public void testDeleteUser_UserNotFound_ExceptionThrown() {
+        // Подготовили моки
+        Mockito.when(userRepository.findById(user.getId())).thenReturn(Optional.empty());
+
+        // Проверяем, что исключение выброшено
+        Assertions.assertThrows(UserNotFoundException.class, () -> regService.deleteUser(user.getId()));
     }
 }

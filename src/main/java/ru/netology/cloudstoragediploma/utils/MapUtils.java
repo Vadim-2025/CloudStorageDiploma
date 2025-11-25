@@ -6,7 +6,6 @@ import ru.netology.cloudstoragediploma.entity.User;
 
 @Service
 public class MapUtils {
-    //Преобразование из DTO в Entity
     public User toUserEntity(UserDTO userDTO) {
         User user = new User();
         user.setLogin(userDTO.getLogin());
@@ -14,7 +13,6 @@ public class MapUtils {
         return user;
     }
 
-    //Преобразование из Entity в DTO
     public UserDTO toUserDto(User user) {
         UserDTO userDTO = new UserDTO();
         userDTO.setLogin(user.getLogin());
